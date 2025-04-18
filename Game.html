@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Serpent Quest</title>
+  <style>
+    body {
+      background-color: #f0f0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      position: relative; /* For absolutely positioned overlays */
+    }
+    h1 {
+      margin: 20px;
+    }
+    #scoreboard {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    #instructions {
+      font-size: 16px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    canvas {
+      background-color: #fff;
+      border: 2px solid #000;
+    }
+    #colorSelection {
+      margin-bottom: 10px;
+    }
+    /* Game Over Overlay */
+    #gameOverMenu {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      display: none;
+      z-index: 10;
+    }
+    #gameOverMenu button, 
+    #gameOverMenu a {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      text-decoration: none;
+      color: #fff;
+      background-color: #007BFF;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #gameOverMenu button:hover, 
+    #gameOverMenu a:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>Serpent Quest</h1>
+  <div id="scoreboard">
+    Score: <span id="score">0</span> |
+    High Score: <span id="highScore">0</span>
+  </div>
+  <p id="instructions">
+    Choose a color, then press an arrow key to start the adventure. Steer your serpent using the arrow keys, gobble red treats to grow, and avoid collisions!
+  </p>
+  <!-- Dropdown for selecting snake color -->
+  <select id="colorSelection">
+    <option value="green">Green (Default)</option>
+    <option value="blue">Blue</option>
+    <option value="purple">Purple</option>
+    <option value="orange">Orange</option>
+  </select>
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+  
+  <!-- Game Over Overlay -->
+  <div id="gameOverMenu">
+    <div id="gameOverMessage"></div>
+    <button id="playAgainBtn">Play Again</button>
+    <a href="index.html">Return Home</a>
+  </div>
+  
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+    const highScoreElement = document.getElementById('highScore');
+    const colorSelection = document.getElementById('colorSelection'); // Dropdown element
+
+    // Game configuration
+    const gridSize = 20;             // Each cell is 20px
+    const tileCount = canvas.width / gridSize; // e.g., 400/20 = 20 cells per row/column
+    const gameSpeed = 100;           // Game update speed in milliseconds
+
+    // Game state variables
+    let gameStarted = false;
+    let gameInterval = null;
+    let snake = [];
+    let direction = { x: 0, y: 0 };
+    let food = {};
+    let snakeColor = colorSelection.value; // Get initial selected color
+
+    // Initialize high score (retrieved from localStorage, if available)
+    let highScore = localStorage.getItem("snakeHighScore") ? parseInt(localStorage.getItem("snakeHighScore")) : 0;
+    highScoreElement.innerText = highScore;
+
+    // Update snake color based on dropdown selection
+    colorSelection.addEventListener('change', function() {
+      snakeColor = this.value; // Update snake color whenever selection changes
+    });
+
+    // Initialize or reset the game state
+    function initializeGame() {
+      snake = [{
+        x: Math.floor(tileCount / 2),
+        y: Math.floor(tileCount / 2)
+      }];
+      // Generate the first food
+      food = randomFood();
+    }
+
+    // Start the game with an initial direction from the key pressed
+    function startGame(initialDirection) {
+      direction = initialDirection;
+      if (!gameStarted) {
+        initializeGame();
+        gameInterval = setInterval(gameLoop, gameSpeed);
+        gameStarted = true;
+      }
+    }
+
+    // Main game loop: update the game state then re-draw.
+    function gameLoop() {
+      const head = {
+        x: snake[0].x + direction.x,
+        y: snake[0].y + direction.y
+      };
+
+      // Check for collision with walls
+      if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+        return gameOver();
+      }
+
+      // Check for collision with self
+      for (let segment of snake) {
+        if (segment.x === head.x && segment.y === head.y) {
+          return gameOver();
+        }
+      }
+
+      // Add the new head
+      snake.unshift(head);
+
+      // Check if food is eaten
+      if (head.x === food.x && head.y === food.y) {
+        food = randomFood();
+      } else {
+        snake.pop(); // Remove the tail if no food is eaten
+      }
+
+      updateScoreboard();
+      draw();
+    }
+
+    // Clear and re-draw the canvas content.
+    function draw() {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw food
+      ctx.fillStyle = "red";
+      ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize, gridSize);
+
+      // Draw snake
+      ctx.fillStyle = snakeColor; // Use selected color for the snake
+      for (let segment of snake) {
+        ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize, gridSize);
+      }
+    }
+
+    // Randomly generate a food position that is not on the snake.
+    function randomFood() {
+      let foodPosition;
+      while (true) {
+        foodPosition = {
+          x: Math.floor(Math.random() * tileCount),
+          y: Math.floor(Math.random() * tileCount)
+        };
+        const collision = snake.some(segment => segment.x === foodPosition.x && segment.y === foodPosition.y);
+        if (!collision) break;
+      }
+      return foodPosition;
+    }
+
+    // Update the scoreboard with the current score and high score.
+    function updateScoreboard() {
+      const score = snake.length - 1;
+      scoreElement.innerText = score;
+    }
+
+    // End the game.
+    function gameOver() {
+      clearInterval(gameInterval);
+      const score = snake.length - 1;
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem("snakeHighScore", highScore);
+        highScoreElement.innerText = highScore;
+      }
+      const gameOverMenu = document.getElementById("gameOverMenu");
+      document.getElementById("gameOverMessage").innerText = "Game Over! Your score: " + score;
+      gameOverMenu.style.display = "block";
+    }
+
+    // Listen for arrow key presses.
+    document.addEventListener('keydown', function(e) {
+      let newDirection = null;
+      switch (e.key) {
+        case 'ArrowUp':
+          newDirection = { x: 0, y: -1 };
+          break;
+        case 'ArrowDown':
+          newDirection = { x: 0, y: 1 };
+          break;
+        case 'ArrowLeft':
+          newDirection = { x: -1, y: 0 };
+          break;
+        case 'ArrowRight':
+          newDirection = { x: 1, y: 0 };
+          break;
+        default:
+          return;
+      }
+
+      if (!gameStarted) {
+        startGame(newDirection);
+      } else {
+        if (snake.length > 1) {
+          if (newDirection.x === -direction.x && newDirection.y === -direction.y) return;
+        }
+        direction = newDirection;
+      }
+    });
+
+    // Play Again button event listener: reloads the page to restart the game.
+    document.getElementById("playAgainBtn").addEventListener('click', function() {
+      location.reload();
+    });
+  </script>
+</body>
+</html>
